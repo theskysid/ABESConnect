@@ -1,5 +1,6 @@
 // Runtime behavior configuration for ABESConnect
 // Credentials are now stored via popup -> chrome.storage.local
+// VibeCoded by Siddhant
 
 const CONFIG = {
   AUTO_SUBMIT_DELAY_MS: 1000, // Delay before clicking submit (in milliseconds)

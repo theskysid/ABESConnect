@@ -1,5 +1,6 @@
 // Content script for ABESConnect
 // Runs on http://192.168.1.254:8090/* and https://192.168.1.254:8090/*
+// VibeCoded by Siddhant
 
 (function () {
     'use strict';
@@ -11,6 +12,7 @@
     let isSubmitting = false;
     let credentials = null;
     let warnedMissingCredentials = false;
+    let closeCheckInterval = null;
 
     function isValidCredentials(creds) {
         return !!(creds && creds.username && creds.password);
@@ -35,6 +37,8 @@
 
     // Function to check for success and close tab
     function checkSuccessAndClose() {
+        if (!document.body) return false;
+
         const bodyText = document.body.innerText.toLowerCase();
         // Check for common indicators of being logged in
         if (bodyText.includes('logout') || bodyText.includes('sign out') || bodyText.includes('logged in')) {
@@ -43,6 +47,44 @@
             return true;
         }
         return false;
+    }
+
+    function requestMainWorldSubmit() {
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: 'execute_login_fn' }, (response) => {
+                if (chrome.runtime.lastError) {
+                    resolve({
+                        ok: false,
+                        error: chrome.runtime.lastError.message
+                    });
+                    return;
+                }
+                resolve(response || { ok: false, error: 'Empty response from background' });
+            });
+        });
+    }
+
+    function startCloseCheckLoop() {
+        let closeCheckCount = 0;
+        if (closeCheckInterval) clearInterval(closeCheckInterval);
+
+        closeCheckInterval = setInterval(() => {
+            if (checkSuccessAndClose()) {
+                clearInterval(closeCheckInterval);
+                closeCheckInterval = null;
+                return;
+            }
+
+            if (closeCheckCount > 20) { // ~10 seconds at 500ms interval
+                clearInterval(closeCheckInterval);
+                closeCheckInterval = null;
+                isSubmitting = false;
+                console.log('ABESConnect: Submit attempt timed out; retrying...');
+                return;
+            }
+
+            closeCheckCount++;
+        }, 500);
     }
 
     function attemptLogin() {
@@ -103,39 +145,20 @@
             isSubmitting = true;
             console.log(`ABESConnect: Submitting in ${AUTO_SUBMIT_DELAY_MS}ms...`);
 
-            setTimeout(() => {
-                console.log('ABESConnect: Triggering submit...');
-
+            setTimeout(async () => {
                 console.log('ABESConnect: Triggering submit...');
 
                 // Method 1: Ask Background script to execute submitRequest() in MAIN world
                 // This bypasses CSP specific to content scripts
                 console.log('ABESConnect: Sending execution request to background...');
-                chrome.runtime.sendMessage({ action: 'execute_login_fn' });
-
-                // Method 2: Click the element with the href (Backup 1)
-                // (Still likely to fail CSP if it's a javascript: link, but worth keeping as finding element check)
-                const ssoLink = document.querySelector('a[href*="submitRequest"]');
-                if (ssoLink) {
-                    // console.log('ABESConnect: Clicking SSO Link...');
-                    // ssoLink.click(); 
+                const submitResult = await requestMainWorldSubmit();
+                if (!submitResult.ok) {
+                    console.warn('ABESConnect: MAIN world submit failed:', submitResult.error);
+                    isSubmitting = false;
+                    return;
                 }
-
-                // Method 3: Click the inner div directly (Backup 2)
-                const loginDiv = document.querySelector('#loginbutton');
-                if (loginDiv) {
-                    console.log('ABESConnect: Clicking login div...');
-                    loginDiv.click();
-                }
-
-                // Start checking for success to close tab
-                let closeCheckCount = 0;
-                const closeCheckInterval = setInterval(() => {
-                    if (checkSuccessAndClose() || closeCheckCount > 20) { // Check for 10 seconds
-                        clearInterval(closeCheckInterval);
-                    }
-                    closeCheckCount++;
-                }, 500);
+                console.log(`ABESConnect: Submit triggered via ${submitResult.method || 'MAIN world'}.`);
+                startCloseCheckLoop();
 
             }, AUTO_SUBMIT_DELAY_MS);
 

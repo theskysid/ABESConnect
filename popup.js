@@ -1,8 +1,8 @@
 // popup.js - Credential capture and manual connect trigger
 
 const PORTAL_URLS = [
-  'https://192.168.1.254:8090/httpclient.html',
-  'http://192.168.1.254:8090/'
+  'http://192.168.1.254:8090/',
+  'https://192.168.1.254:8090/httpclient.html'
 ];
 
 let storedCredentials = null;

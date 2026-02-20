@@ -1,10 +1,9 @@
 // Background service worker for ABESConnect
 
 const PORTAL_URLS = [
-    'https://192.168.1.254:8090/httpclient.html',
-    'http://192.168.1.254:8090/'
+    'http://192.168.1.254:8090/',
+    'https://192.168.1.254:8090/httpclient.html'
 ];
-const PORTAL_URL = PORTAL_URLS[0]; // Default URL used for opening portal tab
 const CHECK_ALARM_NAME = 'check_portal_connectivity';
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -124,7 +123,7 @@ async function checkPortal() {
         const tabs = await chrome.tabs.query({ url: '*://192.168.1.254/*' });
         if (tabs.length === 0) {
             console.log('Opening portal tab...');
-            chrome.tabs.create({ url: PORTAL_URL });
+            chrome.tabs.create({ url: status.url || PORTAL_URLS[0] });
         } else {
             console.log('Portal tab already open.');
         }
@@ -153,27 +152,63 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }));
         return true;
     } else if (request.action === 'execute_login_fn') {
-        if (sender.tab && sender.tab.id) {
-            console.log('Executing login function in MAIN world for tab:', sender.tab.id);
-            chrome.scripting.executeScript({
-                target: { tabId: sender.tab.id },
-                world: 'MAIN',
-                func: () => {
-                    console.log('ABESConnect (MAIN): Attempting to call submitRequest()...');
+        if (!sender.tab || !sender.tab.id) {
+            sendResponse({ ok: false, error: 'No sender tab available' });
+            return;
+        }
+
+        console.log('Executing login function in MAIN world for tab:', sender.tab.id);
+        chrome.scripting.executeScript({
+            target: { tabId: sender.tab.id },
+            world: 'MAIN',
+            func: () => {
+                try {
+                    // Run in page context to avoid isolated-world CSP blocks on javascript: handlers.
                     if (typeof window.submitRequest === 'function') {
                         window.submitRequest();
-                    } else if (typeof submitRequest === 'function') {
-                        submitRequest();
-                    } else {
-                        console.error('ABESConnect (MAIN): submitRequest function not found!');
-                        // Fallback: try finding the form and submitting it
-                        const forms = document.forms;
-                        if (forms.length > 0) {
-                            forms[0].submit();
-                        }
+                        return { ok: true, method: 'window.submitRequest()' };
                     }
+
+                    if (typeof submitRequest === 'function') {
+                        submitRequest();
+                        return { ok: true, method: 'submitRequest()' };
+                    }
+
+                    const loginButton = document.querySelector('#loginbutton');
+                    if (loginButton && typeof loginButton.click === 'function') {
+                        loginButton.click();
+                        return { ok: true, method: '#loginbutton.click()' };
+                    }
+
+                    const primaryForm = document.forms && document.forms[0];
+                    if (primaryForm) {
+                        if (typeof primaryForm.requestSubmit === 'function') {
+                            primaryForm.requestSubmit();
+                        } else {
+                            primaryForm.submit();
+                        }
+                        return { ok: true, method: 'form.submit()' };
+                    }
+
+                    return { ok: false, error: 'No submit method found on page' };
+                } catch (error) {
+                    return {
+                        ok: false,
+                        error: error && error.message ? error.message : 'Unknown MAIN world error'
+                    };
                 }
+            }
+        })
+            .then((results) => {
+                const result = results && results[0] && results[0].result;
+                sendResponse(result || { ok: false, error: 'No result from injected script' });
+            })
+            .catch((error) => {
+                sendResponse({
+                    ok: false,
+                    error: error && error.message ? error.message : 'executeScript failed'
+                });
             });
-        }
+        return true;
     }
 });
