@@ -6,22 +6,31 @@
 
     console.log('ABESConnect: Content script loaded (v3.0 - CSP Bypass via Background).');
 
-    const { USERNAME, PASSWORD, AUTO_SUBMIT_DELAY_MS, MAX_RETRIES, RETRY_INTERVAL_MS } = CONFIG;
-
-    // Check if credentials are set
-    if (USERNAME === 'USERNAME_PLACEHOLDER' || PASSWORD === 'PASSWORD_PLACEHOLDER') {
-        console.warn('ABESConnect: Credentials not set in config.js. Please update them.');
-        return;
-    }
+    const { AUTO_SUBMIT_DELAY_MS, MAX_RETRIES, RETRY_INTERVAL_MS } = CONFIG;
 
     let isSubmitting = false;
+    let credentials = null;
+    let warnedMissingCredentials = false;
 
-    // Helper to inject code into the page context
-    function injectScript(code) {
-        const script = document.createElement('script');
-        script.textContent = code;
-        (document.head || document.documentElement).appendChild(script);
-        script.remove();
+    function isValidCredentials(creds) {
+        return !!(creds && creds.username && creds.password);
+    }
+
+    function getStoredCredentials() {
+        return new Promise((resolve) => {
+            chrome.storage.local.get(['abesCredentials'], (result) => {
+                resolve(result.abesCredentials || null);
+            });
+        });
+    }
+
+    async function loadCredentials(forceReload = false) {
+        if (!forceReload && isValidCredentials(credentials)) {
+            return credentials;
+        }
+
+        credentials = await getStoredCredentials();
+        return credentials;
     }
 
     // Function to check for success and close tab
@@ -38,6 +47,14 @@
 
     function attemptLogin() {
         if (isSubmitting) return;
+
+        if (!isValidCredentials(credentials)) {
+            if (!warnedMissingCredentials) {
+                console.warn('ABESConnect: Missing credentials. Set username/password in the popup.');
+                warnedMissingCredentials = true;
+            }
+            return;
+        }
 
         // If we are already logged in, close immediately
         if (checkSuccessAndClose()) return;
@@ -79,8 +96,8 @@
                 element.blur();
             };
 
-            simulateInput(usernameField, USERNAME);
-            simulateInput(passwordField, PASSWORD);
+            simulateInput(usernameField, credentials.username);
+            simulateInput(passwordField, credentials.password);
 
             // Submit logic
             isSubmitting = true;
@@ -127,38 +144,55 @@
         }
     }
 
-    // Observer
-    const observer = new MutationObserver((mutations) => {
-        if (!isSubmitting) attemptLogin();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    // Initial check
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', attemptLogin);
-    } else {
-        attemptLogin();
-    }
-
-    // Retry loop
-    let retries = 0;
-    const retryInterval = setInterval(() => {
-        if (isSubmitting || retries >= MAX_RETRIES) {
-            clearInterval(retryInterval);
-            return;
-        }
-        attemptLogin();
-        retries++;
-    }, RETRY_INTERVAL_MS);
-
     // Message listener
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.action === 'manual_login') {
             console.log('ABESConnect: Manual login triggered.');
+            if (isValidCredentials(request.credentials)) {
+                credentials = request.credentials;
+                warnedMissingCredentials = false;
+                chrome.storage.local.set({ abesCredentials: credentials });
+            }
             isSubmitting = false;
             attemptLogin();
             sendResponse({ status: 'Login started' });
         }
     });
+
+    async function initialize() {
+        await loadCredentials(true);
+
+        const observer = new MutationObserver(() => {
+            if (!isSubmitting) attemptLogin();
+        });
+
+        if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true });
+        } else {
+            document.addEventListener('DOMContentLoaded', () => {
+                if (document.body) {
+                    observer.observe(document.body, { childList: true, subtree: true });
+                }
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', attemptLogin);
+        } else {
+            attemptLogin();
+        }
+
+        let retries = 0;
+        const retryInterval = setInterval(() => {
+            if (isSubmitting || retries >= MAX_RETRIES) {
+                clearInterval(retryInterval);
+                return;
+            }
+            attemptLogin();
+            retries++;
+        }, RETRY_INTERVAL_MS);
+    }
+
+    initialize();
 
 })();
