@@ -92,7 +92,8 @@
 
         if (!isValidCredentials(credentials)) {
             if (!warnedMissingCredentials) {
-                console.warn('ABESConnect: Missing credentials. Set username/password in the popup.');
+                // Use info-level logging so Chrome doesn't list this expected first-run state as an extension error.
+                console.info('ABESConnect: No saved credentials in this browser profile. Set username/password in the popup once.');
                 warnedMissingCredentials = true;
             }
             return;
@@ -207,10 +208,11 @@
 
         let retries = 0;
         const retryInterval = setInterval(() => {
-            if (isSubmitting || retries >= MAX_RETRIES) {
+            if (retries >= MAX_RETRIES) {
                 clearInterval(retryInterval);
                 return;
             }
+            if (isSubmitting) return;
             attemptLogin();
             retries++;
         }, RETRY_INTERVAL_MS);

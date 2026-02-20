@@ -6,8 +6,7 @@
   "permissions": [
     "storage",
     "scripting",
-    "activeTab",
-    "alarms"
+    "activeTab"
   ],
   "host_permissions": [
     "http://192.168.1.254:8090/*",
