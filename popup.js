@@ -12,7 +12,9 @@ function updateStatus(message, state = 'default') {
   const statusText = document.getElementById('status');
   const body = document.body;
 
-  statusText.textContent = message;
+  if (statusText) {
+    statusText.textContent = message;
+  }
   body.classList.remove('connecting', 'connected');
 
   if (state === 'connecting') {
@@ -82,7 +84,6 @@ function applyViewState() {
     savedInfo.classList.add('hidden');
     editBtn.classList.add('hidden');
     setConnectLabel('Save & Connect');
-    updateStatus('Set credentials to continue');
     return;
   }
 
@@ -92,7 +93,6 @@ function applyViewState() {
     editBtn.classList.remove('hidden');
     editBtn.textContent = 'Cancel Edit';
     setConnectLabel('Save & Connect');
-    updateStatus('Edit credentials and save');
     return;
   }
 
@@ -102,7 +102,6 @@ function applyViewState() {
   editBtn.classList.remove('hidden');
   editBtn.textContent = 'Edit Credentials';
   setConnectLabel('Connect Highspeed');
-  updateStatus('Ready to Connect');
 }
 
 async function triggerConnect(username, password) {

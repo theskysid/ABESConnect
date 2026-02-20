@@ -212,43 +212,6 @@
       background: rgba(148, 163, 184, 0.22);
     }
 
-    /* Status Indicator */
-    .status-container {
-      margin-top: 24px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background-color: var(--text-secondary);
-      transition: background-color 0.3s;
-    }
-
-    .status-text {
-      font-size: 12px;
-      color: var(--text-secondary);
-      font-weight: 500;
-    }
-
-    /* States */
-    body.connecting .status-dot {
-      background-color: #f59e0b;
-      box-shadow: 0 0 10px #f59e0b;
-    }
-
-    body.connected .status-dot {
-      background-color: var(--success);
-      box-shadow: 0 0 10px var(--success);
-    }
-
     /* Footer */
     .footer {
       position: absolute;
@@ -288,11 +251,6 @@
     </button>
 
     <button id="editBtn" type="button" class="secondary-btn hidden">Edit Credentials</button>
-
-    <div class="status-container">
-      <div class="status-dot"></div>
-      <span class="status-text" id="status">Ready to Connect</span>
-    </div>
   </div>
   <div class="footer">v3.0 • Secure Client</div>
 
